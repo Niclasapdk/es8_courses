@@ -1,0 +1,65 @@
+Sensors & Systems – Interpretation Notes (G1, G2, G3)
+
+Models:
+- G1(s) = (0.5s+1)/(s^3 - 3s^2 + 0.4s + 2)
+- G2(s) = [ (0.2s^2+2s+1)/(s^2+4s+1) ;
+            (0.2s^2+1)/(s^2+4s+1) ]
+- G3: xdot = A x + B u, y = C x, with
+      A=[-4 -1; 1 0], B=[2;0], C=[0.6 0.4; -0.4 0.4], D=[0;0]
+
+Expected properties:
+- G1: observable, unstable
+- G2: observable, stable
+- G3: observable, stable
+
+------------------------------------------------------------
+STEP RESPONSE INTERPRETATION
+------------------------------------------------------------
+
+G1 (step):
+- Response grows very large with time (diverges).
+- Interpretation: unstable dynamics (RHP poles dominate).
+- Practical meaning: open-loop unsafe; small excitation can lead to very large output.
+
+G2 (step, 2 outputs):
+- Both outputs settle to ~1.
+- Output 1: mostly monotonic rise.
+- Output 2: initial undershoot then rise.
+- Interpretation: stable system with different output-channel transient shapes.
+
+G3 (step, 2 outputs):
+- Both outputs settle to ~0.8.
+- Output 2 shows initial negative dip before recovery.
+- Interpretation: stable state-space system; transient sign change is from output mixing (C matrix), not instability.
+
+------------------------------------------------------------
+LSIM INTERPRETATION (bounded realistic input)
+Input used:
+u(t) = sin(0.8 t) + 0.5*1(t>=5)
+------------------------------------------------------------
+
+G1 (lsim):
+- Output becomes unbounded (~10^20 scale).
+- Key conclusion: bounded input gives unbounded output => unstable (fails BIBO stability).
+
+G2 (lsim):
+- Both outputs remain bounded.
+- Sinusoid is attenuated and phase-lagged (filtering effect).
+- Small transient/kink around t=5 due to step offset in input.
+- Channels respond differently because numerators (output paths) differ.
+
+G3 (lsim):
+- Bounded outputs, similar lag/attenuation behavior to G2 (same pole dynamics).
+- Output 2 can go negative during transient due to C matrix weighting of states.
+- Stable and physically consistent multi-output behavior.
+
+------------------------------------------------------------
+What to learn from this exercise
+------------------------------------------------------------
+1) Same system concepts across TF and state-space representations.
+2) Stability is visible in plots and confirmed by poles/eigenvalues.
+3) Observability answers whether internal states can be inferred from outputs.
+4) Multi-output systems can be stable while channels look very different.
+5) lsim is crucial: real input tests reveal behavior beyond ideal step tests.
+
+End of notes.

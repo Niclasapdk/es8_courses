@@ -1,0 +1,61 @@
+Exercise 2 – Discretization (Ts = 0.5 s), Forward Euler vs Tustin
+
+Continuous models:
+G1 unstable
+G2 stable
+G3 stable
+
+Key formulas:
+- Forward Euler pole map: z_FE = 1 + p*Ts
+- Tustin pole map:       z_TU = (1 + p*Ts/2)/(1 - p*Ts/2)
+
+Main reason FE looks oscillatory here:
+For G2/G3 poles p ≈ -0.268 and -3.732:
+- z_FE(slow) = 0.866  (ok)
+- z_FE(fast) = -0.866 (negative => alternating sample-to-sample behavior)
+This creates the visible staircase overshoot/undershoot.
+
+Tustin gives smoother behavior and closer match to continuous-time for Ts=0.5 s.
+
+------------------------------------------------------------
+Interpretation of generated plots
+------------------------------------------------------------
+
+1) G1 step: continuous vs FE vs Tustin
+- All responses diverge (unstable model).
+- Tustin diverges fastest in this simulation.
+- FE also unstable/discrete divergent, but appears smaller than Tustin on the same axis scale.
+
+2) G2 step (2 outputs)
+- Continuous response is smooth and converges to ~1.
+- FE shows zig-zag/alternating overshoot and undershoot around continuous curve.
+- Tustin closely follows continuous response.
+
+3) G3 step (2 outputs)
+- Same trend as G2 (same pole dynamics).
+- FE has staircase oscillatory approximation.
+- Tustin closely matches continuous shape and steady-state.
+
+4) G1 lsim: continuous vs FE vs Tustin
+- Bounded input produces unbounded output (unstable).
+- All methods diverge; Tustin grows fastest in this setup.
+
+5) G2 lsim (2 outputs)
+- Continuous outputs remain bounded and smooth.
+- FE introduces extra ripple and phase/amplitude distortion.
+- Tustin tracks continuous response better.
+
+6) G3 lsim (2 outputs)
+- Same conclusion as G2 lsim.
+- FE distortion is visible; Tustin is closer to continuous.
+
+------------------------------------------------------------
+Conclusions
+------------------------------------------------------------
+
+- G1 remains unstable after discretization (both FE and Tustin).
+- G2 and G3 remain stable, but FE quality is poor at Ts=0.5 s due to negative mapped fast pole.
+- Tustin is the preferred method here for matching continuous dynamics.
+
+Practical takeaway:
+If Forward Euler looks too oscillatory, reduce Ts significantly or use Tustin/ZOH.
