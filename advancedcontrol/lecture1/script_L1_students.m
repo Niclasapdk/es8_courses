@@ -29,19 +29,33 @@ sys = ss(A,B,C,D); %building a system object (Attention!: it requires the Contro
 
 %% convert the continuous-time system to discrete-time (check c2d() )
 
-
-
-
 sysd = []; % a dummy discrete-time system 
+
+sysd = c2d(sys, dt, 'zoh'); % convert the continuous-time system to discrete-time using zero-order hold
 
 
 %% check observability
 
+% Check observability
+O = obsv(ss(sysd).A, ss(sysd).C); % Compute the observability matrix
+rankO = rank(O); % Determine the rank of the observability matrix
+if rankO < r
+    disp('The system is not observable.');
+else
+    disp('The system is observable.');
+end
+
 
 %% check controllability
 
+C = ctrb(ss(sysd).A, ss(sysd).B);
 
-
+rankC = rank(C);
+if rankC < r
+    disp('The system is not controllable.');
+else
+    disp('The system is controllable.');
+end
 
 
 %% simulate the system response: 
