@@ -1,65 +1,100 @@
 function res = HoKalmanId(hk, param)
-    p = param.p;   % number of outputs
-    r = param.r;   % number of inputs
-    u = param.u;   % number of block rows (past)
+    p = param.p;   % number of block rows
+    r = param.r;   % number of outputs
+    u = param.u;   % number of inputs
     n = param.n;   % desired system order
-
-    % dummy variables for system matrices
-    Aest = [];
-    Cest = [];
-    Best = [];
-
-    %% Build the Block Hankel Matrix H(1) and H(2)
-    % hk is assumed to be a 3D array: hk(:,:,k) = Markov parameter H_k
-    % size: [p x r x numSamples]
-
-    numCols = u;   % number of block columns
-    numRows = u;   % number of block rows (can differ, but square is common)
-
-    % H(1): starts at Markov parameter index 1
-    H1 = zeros(p * numRows, r * numCols);
-    for i = 1:numRows
-        for j = 1:numCols
-            H1((i-1)*p+1 : i*p, (j-1)*r+1 : j*r) = hk(:,:, i+j-1);
-        end
+    
+    % hk is already the block Hankel matrix from SSImat
+    % Expected dimensions: [r*(p+1) x numCols]
+    
+    [rows, cols] = size(hk);
+    
+    % Verify dimensions - should be r*(p+1) for this formulation
+    expected_rows = r * (p + 1);
+    if rows ~= expected_rows
+        warning('Row dimension: expected %d (r*(p+1)), got %d. Adjusting p accordingly.', expected_rows, rows);
+        p = floor(rows / r) - 1;
+        param.p = p;
     end
-
-    % H(2): starts at Markov parameter index 2 (shift by 1)
-    H2 = zeros(p * numRows, r * numCols);
-    for i = 1:numRows
-        for j = 1:numCols
-            H2((i-1)*p+1 : i*p, (j-1)*r+1 : j*r) = hk(:,:, i+j);
-        end
+    
+    %% SVD of the Hankel matrix
+    [U, S, V] = svd(hk, 'econ');
+    S = diag(S);  % Extract singular values as a vector
+    
+    %% Truncate to desired order n
+    if n > length(S)
+        warning('Requested order n=%d is larger than available rank %d. Using n=%d instead.', n, length(S), length(S));
+        n = length(S);
     end
-
-    %% SVD of H1
-    [U, S, V] = svd(H1);
-
-    %% Truncate to desired order n (plot singular values to choose n)
-    Un = U(:, 1:n);
-    Sn = S(1:n, 1:n);
-    Vn = V(:, 1:n);
-
-    %% Extract system matrices
-    % Observability matrix  : O = Un * Sn^(1/2)
-    % Controllability matrix: C = Sn^(1/2) * Vn'
-
-    Sn_sqrt     = diag(sqrt(diag(Sn)));
-    Sn_sqrt_inv = diag(1 ./ sqrt(diag(Sn)));
-
-    O = Un * Sn_sqrt;   % [p*u x n]  observability matrix
-    Ct = Sn_sqrt * Vn'; % [n x r*u]  controllability matrix
-
-    %% Recover C, B, A
-    Cest = O(1:p, :);                    % first p rows of O
-    Best = Ct(:, 1:r);                   % first r cols of controllability matrix
-
-    % A from the shifted Hankel: A = Sn^(-1/2) * Un' * H2 * Vn * Sn^(-1/2)
-    Aest = Sn_sqrt_inv * Un' * H2 * Vn * Sn_sqrt_inv;
-
+    
+    Us = U(:, 1:n);
+    Ss = S(1:n);
+    Vs = V(:, 1:n);
+    
+    %% Build observability matrix
+    Ob = Us * diag(sqrt(Ss));
+    
+    %% Extract shifted observability matrices
+    Ob_up = Ob(1:p*r, :);                % Upper part: rows 1 to p*r
+    Ob_dn = Ob(r+1:(p+1)*r, :);          % Lower part: rows r+1 to (p+1)*r (shifted)
+    
+    %% Estimate system matrices
+    Aest = pinv(Ob_up) * Ob_dn;          % State matrix using pseudoinverse
+    Cest = Ob(1:r, :);                   % Output matrix: first r rows
+    
+    %% Estimate B matrix using controllability
+    % Controllability matrix from SVD
+    Reac = diag(sqrt(Ss)) * Vs';         % Reachability matrix
+    Best = Reac(:, 1:u);                 % First u columns
+    
+    %% Compute condition number of eigenvalues
+    eigenvalues = eig(Aest);
+    
+    % Condition number can be computed in different ways:
+    % 1. Ratio of largest to smallest magnitude
+    eigen_magnitudes = abs(eigenvalues);
+    if min(eigen_magnitudes) > 1e-10  % Avoid division by near-zero
+        cond_number_magnitude = max(eigen_magnitudes) / min(eigen_magnitudes);
+    else
+        cond_number_magnitude = Inf;
+    end
+    
+    % 2. Condition number of eigenvector matrix (more robust measure)
+    [V_eig, D_eig] = eig(Aest);
+    cond_number_eigenvectors = cond(V_eig);
+    
     %% Output
     res.A = Aest;
     res.B = Best;
     res.C = Cest;
-    res.S = diag(Sn);   % singular values (useful for order selection)
+    res.Aest = Aest;              % For compatibility
+    res.Best = Best;
+    res.Cest = Cest;
+    res.S = Ss;                   % Singular values
+    res.eigenvalues = eigenvalues;
+    res.cond_magnitude = cond_number_magnitude;
+    res.cond_eigenvectors = cond_number_eigenvectors;
+    
+    % Display results
+    fprintf('\n=== System Identification Results ===\n');
+    fprintf('System order n = %d\n', n);
+    fprintf('Number of singular values retained: %d\n', length(Ss));
+    fprintf('\nSingular values (top %d):\n', min(10, length(Ss)));
+    disp(Ss(1:min(10, length(Ss)))');
+    
+    fprintf('\nEigenvalues of A:\n');
+    disp(eigenvalues);
+    
+    fprintf('\nCondition numbers:\n');
+    fprintf('  Magnitude ratio (max/min): %.4e\n', cond_number_magnitude);
+    fprintf('  Eigenvector matrix cond():  %.4e\n', cond_number_eigenvectors);
+    
+    % Stability check
+    max_eigen_mag = max(abs(eigenvalues));
+    if max_eigen_mag < 1
+        fprintf('\nSystem is STABLE (max |eigenvalue| = %.4f < 1)\n', max_eigen_mag);
+    else
+        fprintf('\nSystem is UNSTABLE (max |eigenvalue| = %.4f >= 1)\n', max_eigen_mag);
+    end
+    fprintf('=====================================\n\n');
 end
