@@ -85,7 +85,7 @@ def main():
 
     # Controller solver files (change only these strings if you want other versions of your solvers)
     qp_solver_file  = 'qp_OCP_dv.casadi'                    # e.g. 'qp_OCP_dv_slack.casadi'
-    nlp_solver_file = 'nlp_circle_wall_obstacle_dv_slack.casadi'  # e.g. 'nlp_circle_wall_obstacle_dv_slack.casadi'
+    nlp_solver_file = 'nlp_circle_wall_obstacle_dv.casadi'  # e.g. 'nlp_circle_wall_obstacle_dv_slack.casadi'
 
     np.random.seed(1)
 
