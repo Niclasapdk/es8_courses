@@ -55,23 +55,42 @@ param.r = r;
 param.m = m;
 
 [hk,param]=SSImat(y,param); %compute the block Hankel matrix
-
 res = subspaceId(hk,param);
-
+Hdat = param.Hdat; % Det her er fra lec6 ses3 subsapce for at bygge LQ
+% Now we need to find L21
+R = triu(qr(Hdat',0))';
+proj = R((p+1)*r+1:end,1:(p+1)*r);
+projf = R((p+1+1)*r+1 : end , 1:(p+1+1)*(r)); % this for states calculation for kalman data matrice is shifted by 1
+hk = proj;
+[U, S, V] = svd(hk, 'econ');
+S = diag(S);
 
 %% validate the obtained system matrices
 
-Aest = idres.Aest;
-Cest = idres.Cest;
-Best = idres.Best;
+%Aest = idres.Aest;
+%Cest = idres.Cest;
+%Best = idres.Best;
  
+% Truncate at model order n
+U1 = U(:, 1:n);
+S1 = diag(S(1:n));  % convert back to diagonal matrix
 
+% Observability matrix
+O = U1 * sqrtm(S1);
 
+% C is the first r rows
+C = O(1:r, :);
 
+% A from the shift property
+O_up = O(1:end-r, :);
+O_down = O(r+1:end, :);
+A = O_up \ O_down;
 
-
-
-
-
-
+figure;
+semilogy(S, 'o-');
+xlabel('Index');
+ylabel('Singular value');
+title('Singular values');
+grid on;
+xline(n, 'r--', 'Chosen order');
 

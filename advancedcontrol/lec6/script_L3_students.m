@@ -69,7 +69,7 @@ function res = subspaceId(Y,U,param)
     nmax = param.n;
         
     [Hdat,Htot] = data_Hankel(Y,U.',param);
-    [proj,projf,yp1,yp0] = proj_Hankel(Hdat,param);
+    [proj,projf,yp1,yp0] = proj_Hankel(Hdat,param); % Exercises add covariance driven algorithm instead of N4SID we do not have the states from covariance algorithm
     
     % Data driven algorithm
     [U,S,~] = svd(proj,'econ');
