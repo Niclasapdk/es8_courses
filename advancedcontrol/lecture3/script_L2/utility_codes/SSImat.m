@@ -68,8 +68,7 @@ function [hk,param]=SSImat(inMat,param)
             %
             param.hkm = RQ(:,((q+1)*r+1):nj)'*RQ(:,1:(q+1)*r)*...
                 pinv(RQ(:,1:(q+1)*r)'*RQ(:,1:(q+1)*r))*RQ(:,1:(q+1)*r)';
-
     end
-
+    param.Hdat = [RQ(:,(q*r+1):nj)'; RQ(:,1:q*r)']; %ses3 lec6 for at finde ud af slide 11 exercise
 end
 
