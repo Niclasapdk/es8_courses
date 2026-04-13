@@ -1,0 +1,213 @@
+● Project Overview — Where's Waldo/Wilma YOLOv8 Detector
+
+  Goal: Train a YOLOv8 object detector to locate and classify Waldo or Wilma in synthetic beach-scene images.
+
+  ──────────────────────────────────────────────────────────────────
+  Dataset Description
+  ──────────────────────────────────────────────────────────────────
+
+  Source (Kaggle): /kaggle/input/datasets/sheshngupta/waldowilma/generated_images/
+  Also uploaded as Kaggle dataset: johnask/waldo-labels
+
+  Structure:
+  - charecters/waldo.png (812×1600 RGBA)  — character template
+  - charecters/wilma.png (469×1000 RGBA)  — character template
+  - original_350x500/     — 5000 images (500×350 RGBA), named image_0.png … image_4999.png
+  - resized_224x224/      — 5000 images (224×224 RGBA), named resized_image_0.png … resized_image_4999.png
+
+  All images share the same beach scene background with either Waldo or Wilma pasted at a
+  random location. No annotations are provided in the original dataset.
+
+  Labels (generated in Phase 1):
+  - labels_resized_224x224/ — 5000 YOLO .txt files matching the 224×224 images
+  - labels_original_350x500/ — 5000 YOLO .txt files matching the 500×350 images
+  - annotations_resized.csv / annotations_original.csv — human-readable pixel coords + class
+
+  YOLO label format (one line per file):
+    <class_id> <cx_norm> <cy_norm> <w_norm> <h_norm>
+    class 0 = waldo, class 1 = wilma, all values normalised to [0,1]
+
+  Class distribution: 2484 waldo / 2516 wilma (~50/50)
+
+  ──────────────────────────────────────────────────────────────────
+  Phase 1 — Label Generation  [COMPLETE]
+  ──────────────────────────────────────────────────────────────────
+
+  Problem: no annotation files exist in the original dataset.
+
+  What was tried first:
+  - Multi-scale template matching (cv2.matchTemplate) — failed completely.
+    The beach background matched the templates better than the actual characters,
+    producing identical bounding boxes for every image.
+
+  Final approach — image differencing:
+  1. Compute background: sample 50 random images, take per-pixel median.
+     Characters appear at different positions so the median converges to the clean background.
+  2. Diff each image: diff = |image - background|, threshold at 30, morphological close+open.
+  3. Bounding box: largest contour in the diff mask = character location.
+  4. Identify class: crop character region, resize both templates to crop size, apply alpha mask,
+     compute masked MSE against each template — lower MSE wins.
+
+  Outputs (local + uploaded as johnask/waldo-labels on Kaggle):
+  - labels_resized_224x224/   — used for training
+  - labels_original_350x500/  — available but not used
+  - annotations_resized.csv / annotations_original.csv
+
+  Verification: 20 random images visually inspected — bounding boxes correct.
+  Output saved to verifyoutput.png.
+
+  Scripts:
+  - phase1_label_generation.py  — runs on Kaggle, generates all labels
+  - verify_labels.py            — runs locally, draws boxes on sample images
+
+  ──────────────────────────────────────────────────────────────────
+  Phase 2 — Dataset Split + YOLOv8 Training  [COMPLETE — needs re-run]
+  ──────────────────────────────────────────────────────────────────
+
+  Script: phase2_train.py (runs on Kaggle)
+
+  What it does:
+  1. Reads images from /kaggle/input/datasets/sheshngupta/waldowilma/generated_images/resized_224x224
+  2. Reads labels from /kaggle/input/datasets/johnask/waldo-labels/labels_resized_224x224
+  3. Splits 5000 samples 70/15/15 → train (3500) / val (750) / test (750), seed=42
+  4. Copies into YOLO folder structure under /kaggle/working/dataset/:
+       dataset/images/train|val|test/
+       dataset/labels/train|val|test/
+  5. Writes data.yaml (nc=2, names=[waldo, wilma])
+  6. Fine-tunes yolov8n.pt — 30 epochs, imgsz=224, batch=32
+
+  Known issue / history:
+  - First training run produced a model that detected nothing.
+  - Root cause: LBL_SRC path was a placeholder — labels were not loaded during training.
+  - The original waldo_labels.zip was corrupt (contained Kaggle virtual_documents/ artefacts).
+  - Fix: labels were repacked locally into waldo_labels_fresh.zip, then uploaded directly
+    as a Kaggle dataset (johnask/waldo-labels). phase2_train.py now reads labels directly
+    from that dataset path — no zip extraction needed.
+  - phase2_train.py is now correct and ready to re-run.
+
+  Output:
+  - Trained weights saved to /kaggle/working/runs/waldo_wilma/weights/best.pt
+  - Download best.pt and place in new_waldo/ to run local verification.
+
+  ──────────────────────────────────────────────────────────────────
+  Phase 3 — Verification  [READY — awaiting valid best.pt]
+  ──────────────────────────────────────────────────────────────────
+
+  Script: verify_model.py (runs locally)
+
+  Requirements:
+  - ultralytics installed locally
+  - best.pt placed in new_waldo/
+
+  What it does:
+  - Picks 16 random images from resized_224x224/
+  - Runs inference at conf=0.1 (low threshold to catch weak detections)
+  - Draws predicted bounding box + class/confidence label on each image
+  - Green border = prediction matches ground truth label
+  - Red border   = wrong prediction
+  - Saves result to verify_model_output.png
+  - Prints spot-check accuracy
+
+  ──────────────────────────────────────────────────────────────────
+  Files in new_waldo/
+  ──────────────────────────────────────────────────────────────────
+
+  phase1_label_generation.py   — Kaggle: generates YOLO labels via image differencing
+  verify_labels.py             — local: visual check of Phase 1 labels
+  phase2_train.py              — Kaggle: splits dataset, writes data.yaml, trains YOLOv8n
+  verify_model.py              — local: spot-checks trained model on 16 random images
+  data.yaml                    — YOLO dataset config (points to Kaggle paths)
+  annotations_resized.csv      — human-readable labels for 224×224 images
+  annotations_original.csv     — human-readable labels for 350×500 images
+  waldo_labels_fresh.zip       — clean repack of labels_resized_224x224/ (valid zip)
+  verifyoutput.png             — Phase 1 label verification output
+  verify_model_output.png      — Phase 3 model verification output (last run)
+  yolov8n.pt                   — YOLOv8 nano base weights (pre-training)
+  resized_224x224/             — 5000 input images (224×224)
+  labels_resized_224x224/      — 5000 YOLO label files
+  original_350x500/            — 5000 input images (500×350) — not used for training
+  labels_original_350x500/     — YOLO labels for 500×350 images — not used for training
+
+  ──────────────────────────────────────────────────────────────────
+  Phase 4 — Local Validation Results  [COMPLETE]
+  ──────────────────────────────────────────────────────────────────
+
+  Script: validate_local.py (runs locally)
+
+  What it does:
+  - Recreates the 70/15/15 split (seed=42) locally using symlinks
+  - Runs model.val() on the test split (750 images) with plots=True
+  - Generates confusion matrix, PR curves, and F1 curves in runs/detect/valN/
+
+  Confusion matrix results (test split, 750 images):
+  - Waldo correct:   92% (432/468)
+  - Wilma correct:   100% (281/281)
+  - Class confusion:  low — only 36 Waldo→Wilma, 1 Wilma→Waldo
+  - Missed detections: 0 (100% recall)
+  - False positives:  250 extra bounding boxes (190 predicted Waldo, 60 predicted Wilma)
+
+  Key observation — no negative samples in training data:
+  Every image in the dataset contains exactly one character. The model has never seen a
+  background-only image (no Waldo or Wilma). This means it learned "there is always
+  something to detect", which causes it to produce duplicate/extra bounding boxes rather
+  than suppressing low-confidence detections.
+
+  ──────────────────────────────────────────────────────────────────
+  Phase 5 — Negative Samples Generation  [COMPLETE]
+  ──────────────────────────────────────────────────────────────────
+
+  Script: generate_negative_samples.py (runs locally)
+
+  What it does:
+  1. Computes median background from 50 random images (same method as Phase 1)
+  2. Generates 500 variations with random Gaussian noise (sigma 5–15),
+     brightness jitter (±20), and contrast jitter (0.85–1.15)
+  3. Saves as negative_0.png … negative_499.png into resized_224x224/
+  4. Creates matching empty .txt label files in labels_resized_224x224/
+     (YOLO convention for "no objects in this image")
+
+  Dataset is now 5500 images total:
+  - 5000 original (2484 waldo + 2516 wilma, one character each)
+  - 500 negative  (background-only, ~9% of total)
+
+  Files are in the same folders as the originals so they will be picked up
+  automatically by phase2_train.py when re-run on Kaggle.
+
+  ──────────────────────────────────────────────────────────────────
+  Phase 6 — NMS Tuning Experiment  [COMPLETE — ineffective]
+  ──────────────────────────────────────────────────────────────────
+
+  Attempted: lowering NMS IoU threshold from 0.7 → 0.3 in validate_local.py.
+  Result: zero change in confusion matrix. Numbers identical to Phase 5 run.
+
+  Root cause: duplicate detections are on spatially separate body parts
+  (e.g. head vs torso vs legs of the same character). They don't overlap
+  enough for NMS to merge them, so IoU threshold has no effect.
+
+  Attempted: adding 500 negative (background-only) samples and retraining.
+  Result: did not reduce false positives (250 → 303). Waldo accuracy also
+  dropped (92% → 87%) and class confusion increased (Waldo→Wilma: 36 → 110).
+  The synthetic negatives were too different from the actual false-positive
+  regions to help.
+
+  ──────────────────────────────────────────────────────────────────
+  Phase 7 — Upgrade to YOLOv8s  [IN PROGRESS]
+  ──────────────────────────────────────────────────────────────────
+
+  Change: phase2_train.py updated to use yolov8s.pt (small) instead of
+  yolov8n.pt (nano). The small model has ~4x more parameters and learns
+  more holistic features, making it less likely to fire on individual
+  body parts of the character.
+
+  Hypothesis: the nano model fires separate detections on head/torso/legs
+  because it lacks the capacity to learn the full character as one object.
+  A larger model should produce a single confident detection per character.
+
+  ──────────────────────────────────────────────────────────────────
+  Next Step
+  ──────────────────────────────────────────────────────────────────
+
+  1. Re-run phase2_train.py on Kaggle (now uses yolov8s.pt)
+  2. Download new best.pt and run validate_local.py
+  3. Compare confusion matrix against Phase 4 baseline
+  4. Prepare before/after results for oral exam presentation
